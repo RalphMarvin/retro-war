@@ -11,6 +11,42 @@ import { Player } from './player';
 import { BunkerTerrain } from './terrain';
 import { AmmoState, GameState, PickupItem, PlayerStats } from './types';
 
+export interface BattleFrame {
+  player: {
+    x: number;
+    y: number;
+    angle: number;
+    health: number;
+    isMoving: boolean;
+  };
+  enemies: Array<{
+    x: number;
+    y: number;
+    type: 'drone' | 'mech';
+    health: number;
+    maxHealth: number;
+    active: boolean;
+  }>;
+  pickups: Array<{
+    x: number;
+    y: number;
+    type: 'ammo' | 'health';
+  }>;
+  cameraX: number;
+  cameraY: number;
+  width: number;
+  height: number;
+  isMobileMode: boolean;
+  wave: number;
+  flash: {
+    x: number;
+    y: number;
+    active: boolean;
+    intensity: number;
+  };
+  gameState: GameState;
+}
+
 export class GameEngine {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
@@ -76,6 +112,7 @@ export class GameEngine {
   // UI Event Callback
   public onStatsUpdate: ((stats: PlayerStats, ammo: AmmoState) => void) | null = null;
   public onStateChange: ((state: GameState) => void) | null = null;
+  public onSceneUpdate: ((frame: BattleFrame) => void) | null = null;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -257,7 +294,7 @@ export class GameEngine {
       aimWorldY = this.player.y + this.touchAim.y * 200;
     }
 
-    const wantsFire = this.isMouseDown || !!this.keys['space'] || this.isTouchFiring;
+    const wantsFire = this.isMouseDown || this.keys['space'] || this.isTouchFiring;
 
     // Mobile Tactical Auto-Lock Aiming:
     // Only lock onto active hostiles currently visible within the camera viewport frame!
@@ -312,7 +349,7 @@ export class GameEngine {
         aimX: aimWorldX,
         aimY: aimWorldY,
         isFiring: wantsFire,
-        wantsReload: !!this.keys['r'],
+        wantsReload: this.keys['r'],
       },
       this.bulletPool,
       this.particlePool,
@@ -538,8 +575,7 @@ export class GameEngine {
     const viewH = this.height / zoom;
 
     // Clear
-    ctx.fillStyle = '#0a0d10';
-    ctx.fillRect(0, 0, this.width, this.height);
+    ctx.clearRect(0, 0, this.width, this.height);
 
     ctx.save();
 
@@ -611,6 +647,8 @@ export class GameEngine {
     this.drawCrosshair(ctx);
 
     ctx.restore(); // remove screen shake
+
+    this.onSceneUpdate?.(this.getSceneState());
   }
 
   private drawTargetLock(ctx: CanvasRenderingContext2D, enemy: Enemy) {
@@ -767,3 +805,5 @@ export class GameEngine {
     }
   }
 }
+
+
