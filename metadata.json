@@ -1,0 +1,6 @@
+{
+  "name": "Operation Ironpoint",
+  "description": "Tactical top-down military twin-stick shooter featuring realistic procedural soldier animation, weapon recoil, glowing tracers, synthesized audio, and combat robotics.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
