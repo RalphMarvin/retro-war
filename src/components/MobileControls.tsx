@@ -29,6 +29,31 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
 
   const maxRadius = 46;
 
+  // Ensure controls are reset on mount, unmount, and global touchup
+  React.useEffect(() => {
+    setIsTriggerActive(false);
+    setIsStickActive(false);
+    onFire(false);
+    onMoveVector({ x: 0, y: 0 });
+
+    const handleGlobalRelease = () => {
+      setIsTriggerActive(false);
+      onFire(false);
+    };
+
+    window.addEventListener('touchend', handleGlobalRelease);
+    window.addEventListener('touchcancel', handleGlobalRelease);
+    window.addEventListener('mouseup', handleGlobalRelease);
+
+    return () => {
+      onFire(false);
+      onMoveVector({ x: 0, y: 0 });
+      window.removeEventListener('touchend', handleGlobalRelease);
+      window.removeEventListener('touchcancel', handleGlobalRelease);
+      window.removeEventListener('mouseup', handleGlobalRelease);
+    };
+  }, [onFire, onMoveVector]);
+
   // Joystick touch handlers
   const handleStickStart = (e: React.TouchEvent<HTMLDivElement>) => {
     e.preventDefault();

@@ -72,89 +72,13 @@ export const TacticalHUD: React.FC<TacticalHUDProps> = ({
 
   return (
     <div className="pointer-events-none absolute inset-0 select-none overflow-hidden font-sans">
-      {/* 1. TOP TELEMETRY BAR */}
-      <header className="pointer-events-auto flex items-center justify-between border-b border-cyan-950/60 bg-slate-950/75 px-6 py-3 backdrop-blur-md">
-        {/* Sector Identity */}
-        <div className="flex items-center gap-3">
-          <div className="flex h-7 w-7 items-center justify-center rounded border border-cyan-500/40 bg-cyan-950/40 text-cyan-400">
-            <Target className="h-4 w-4" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2 text-xs font-semibold tracking-wider text-slate-200">
-              <span>OPERATION IRONPOINT</span>
-              <span className="text-cyan-500/60" aria-hidden="true">·</span>
-              <span className="text-cyan-400">BUNKER SECTOR {stats.wave}</span>
-            </div>
-            <div className="text-[11px] text-slate-400">
-              Hostiles Active · Escalation Wave {stats.wave}
-            </div>
-          </div>
-        </div>
-
-        {/* Center Score & Neutralized */}
-        <div className="flex items-center gap-8 text-sm">
-          <div className="text-center">
-            <div className="text-[10px] uppercase tracking-wider text-slate-400">Combat Score</div>
-            <div className="font-mono text-lg font-bold tabular-nums text-cyan-300">
-              {stats.score.toLocaleString()}
-            </div>
-          </div>
-          <div className="text-center">
-            <div className="text-[10px] uppercase tracking-wider text-slate-400">Neutralized</div>
-            <div className="font-mono text-lg font-bold tabular-nums text-slate-200">
-              {stats.kills}
-            </div>
-          </div>
-          <div className="hidden text-center sm:block">
-            <div className="text-[10px] uppercase tracking-wider text-slate-400">Record</div>
-            <div className="font-mono text-lg font-bold tabular-nums text-amber-400">
-              {highScore.toLocaleString()}
-            </div>
-          </div>
-        </div>
-
-        {/* Action Controls */}
-        <div className="flex items-center gap-2">
-          <button
-            onClick={onToggleMute}
-            aria-label={isMuted ? 'Unmute Audio' : 'Mute Audio'}
-            className="flex h-8 w-8 items-center justify-center rounded border border-slate-800 bg-slate-900/80 text-slate-300 transition-colors hover:border-cyan-500/50 hover:bg-slate-800 hover:text-cyan-300"
-          >
-            {isMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
-          </button>
-          {gameState === 'PLAYING' && (
-            <button
-              onClick={onTogglePause}
-              aria-label="Pause Game"
-              className="flex h-8 w-8 items-center justify-center rounded border border-slate-800 bg-slate-900/80 text-slate-300 transition-colors hover:border-cyan-500/50 hover:bg-slate-800 hover:text-cyan-300"
-            >
-              <Pause className="h-4 w-4" />
-            </button>
-          )}
-        </div>
-      </header>
-
-      {/* 2. BOTTOM TACTICAL PANELS (ACTIVE GAMEPLAY) */}
-      {gameState === 'PLAYING' && (
-        <footer className="pointer-events-none absolute bottom-36 sm:bottom-4 left-4 right-4 flex items-end justify-between gap-4">
-          {/* Bottom-Left: Operative Vitals Gauge */}
-          <div className="pointer-events-auto rounded-lg border border-cyan-900/50 bg-slate-950/85 p-2.5 sm:p-3.5 shadow-2xl backdrop-blur-md w-48 sm:w-72">
-            <div className="flex items-center justify-between text-xs font-semibold tracking-wide">
-              <span className="flex items-center gap-1.5 text-slate-300">
-                <Shield className="h-3.5 w-3.5 text-cyan-400" />
-                VITALS
-              </span>
-              <span
-                className={`font-mono text-xs tabular-nums ${
-                  isHealthCritical ? 'font-bold text-red-400' : 'text-cyan-300'
-                }`}
-              >
-                {Math.round(stats.health)} / {stats.maxHealth}
-              </span>
-            </div>
-
-            {/* Health Bar with segmented ticks */}
-            <div className="mt-1.5 sm:mt-2 h-2.5 sm:h-3.5 w-full overflow-hidden rounded border border-slate-800 bg-slate-900">
+      {/* 1. ULTRA-COMPACT SLIM TACTICAL TOP BAR (ALL METERS INLINE) */}
+      <header className="pointer-events-auto flex h-8 sm:h-9 items-center justify-between border-b border-cyan-950/60 bg-slate-950/85 px-2.5 sm:px-4 backdrop-blur-md">
+        {/* Left: Operative Vitals Gauge */}
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          <Shield className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-cyan-400 shrink-0" />
+          <div className="flex items-center gap-1.5">
+            <div className="h-2 w-16 sm:w-22 overflow-hidden rounded border border-slate-800 bg-slate-900">
               <div
                 className={`h-full transition-all duration-150 ${
                   isHealthCritical
@@ -164,64 +88,80 @@ export const TacticalHUD: React.FC<TacticalHUDProps> = ({
                 style={{ width: `${healthPct}%` }}
               />
             </div>
+            <span
+              className={`font-mono text-[10px] sm:text-[11px] font-bold tabular-nums ${
+                isHealthCritical ? 'text-red-400' : 'text-cyan-300'
+              }`}
+            >
+              {Math.round(stats.health)}
+            </span>
+          </div>
+        </div>
 
-            <div className="mt-1 flex items-center justify-between text-[10px] sm:text-[11px] text-slate-400">
-              <span>{isHealthCritical ? 'CRITICAL' : 'ARMOR OK'}</span>
-              <span>ACCURACY {accuracy}%</span>
-            </div>
+        {/* Center: Sector & Score */}
+        <div className="flex items-center gap-2 sm:gap-4 text-xs">
+          <div className="flex items-center gap-1 font-mono text-[10px] sm:text-xs text-slate-300">
+            <span className="text-slate-400 text-[9px] sm:text-[10px]">WAVE</span>
+            <span className="font-bold text-cyan-400">{stats.wave}</span>
+          </div>
+          <span className="text-slate-600" aria-hidden="true">·</span>
+          <div className="flex items-center gap-1 font-mono text-[10px] sm:text-xs">
+            <span className="text-slate-400 text-[9px] sm:text-[10px]">SCORE</span>
+            <span className="font-bold text-cyan-300 tabular-nums">{stats.score.toLocaleString()}</span>
+          </div>
+          <span className="text-slate-600 hidden sm:inline" aria-hidden="true">·</span>
+          <div className="hidden sm:flex items-center gap-1 font-mono text-xs">
+            <span className="text-slate-400 text-[10px]">KILLS</span>
+            <span className="font-bold text-slate-200 tabular-nums">{stats.kills}</span>
+          </div>
+        </div>
+
+        {/* Right: M4A1 Ammo & Controls */}
+        <div className="flex items-center gap-1.5 sm:gap-2.5">
+          <div className="flex items-center gap-1 font-mono text-[10px] sm:text-xs">
+            <Flame className="h-3 w-3 text-amber-400 shrink-0" />
+            <span
+              className={`font-bold tabular-nums ${
+                ammo.currentMag <= 6 ? 'text-red-400' : 'text-amber-400'
+              }`}
+            >
+              {String(ammo.currentMag).padStart(2, '0')}
+            </span>
+            <span className="text-slate-500">/</span>
+            <span className="text-slate-400 tabular-nums text-[9px] sm:text-xs">{ammo.reserve}</span>
           </div>
 
-          {/* Bottom-Right: Ammunition & Weapon Status */}
-          <div className="pointer-events-auto flex flex-col items-end gap-2">
-            <div className="rounded-lg border border-cyan-900/50 bg-slate-950/85 p-2.5 sm:p-3.5 shadow-2xl backdrop-blur-md w-48 sm:w-72">
-              <div className="flex items-center justify-between text-xs font-semibold tracking-wide">
-                <span className="flex items-center gap-1.5 text-slate-300">
-                  <Flame className="h-3.5 w-3.5 text-amber-400" />
-                  M4A1
-                </span>
-                <span className="text-[10px] sm:text-[11px] text-slate-400">STANAG 5.56</span>
-              </div>
+          {/* Quick Reload Button */}
+          <button
+            onClick={onReload}
+            disabled={ammo.isReloading || ammo.currentMag === 30 || ammo.reserve <= 0}
+            className="flex h-5 sm:h-6 items-center gap-1 rounded border border-amber-600/40 bg-amber-950/30 px-1.5 text-[9px] sm:text-[10px] font-medium text-amber-300 transition-colors hover:bg-amber-900/50 disabled:opacity-30"
+          >
+            <RotateCcw className={`h-2.5 w-2.5 sm:h-3 sm:w-3 ${ammo.isReloading ? 'animate-spin' : ''}`} />
+            <span className="hidden sm:inline">{ammo.isReloading ? 'RELOAD...' : 'R'}</span>
+          </button>
 
-              {/* Magazine display */}
-              <div className="mt-1.5 sm:mt-2 flex items-baseline justify-between">
-                <div className="flex items-baseline gap-1 font-mono">
-                  <span
-                    className={`text-2xl sm:text-3xl font-black tabular-nums ${
-                      ammo.currentMag <= 6 ? 'text-red-400' : 'text-amber-400'
-                    }`}
-                  >
-                    {String(ammo.currentMag).padStart(2, '0')}
-                  </span>
-                  <span className="text-slate-500">/</span>
-                  <span className="text-xs sm:text-sm font-semibold tabular-nums text-slate-400">
-                    {ammo.reserve}
-                  </span>
-                </div>
+          {/* Mute Button */}
+          <button
+            onClick={onToggleMute}
+            aria-label={isMuted ? 'Unmute Audio' : 'Mute Audio'}
+            className="flex h-5 w-5 sm:h-6 sm:w-6 items-center justify-center rounded border border-slate-800 bg-slate-900/80 text-slate-300 transition-colors hover:border-cyan-500/50 hover:text-cyan-300"
+          >
+            {isMuted ? <VolumeX className="h-3 w-3" /> : <Volume2 className="h-3 w-3" />}
+          </button>
 
-                {/* Reload button */}
-                <button
-                  onClick={onReload}
-                  disabled={ammo.isReloading || ammo.currentMag === 30 || ammo.reserve <= 0}
-                  className="flex items-center gap-1 rounded border border-amber-600/40 bg-amber-950/30 px-2.5 sm:px-3 py-1 sm:py-1.5 text-[11px] sm:text-xs font-medium text-amber-300 transition-colors hover:bg-amber-900/50 disabled:opacity-30"
-                >
-                  <RotateCcw className="h-3 w-3" />
-                  {ammo.isReloading ? 'RELOAD...' : 'RELOAD [R]'}
-                </button>
-              </div>
-
-              {/* Reload Progress bar */}
-              {ammo.isReloading && (
-                <div className="mt-1.5 sm:mt-2 h-1.5 w-full overflow-hidden rounded bg-slate-800">
-                  <div
-                    className="h-full bg-amber-400 transition-all"
-                    style={{ width: `${Math.min(100, ammo.reloadProgress * 100)}%` }}
-                  />
-                </div>
-              )}
-            </div>
-          </div>
-        </footer>
-      )}
+          {/* Pause Button */}
+          {gameState === 'PLAYING' && (
+            <button
+              onClick={onTogglePause}
+              aria-label="Pause Game"
+              className="flex h-5 w-5 sm:h-6 sm:w-6 items-center justify-center rounded border border-slate-800 bg-slate-900/80 text-slate-300 transition-colors hover:border-cyan-500/50 hover:text-cyan-300"
+            >
+              <Pause className="h-3 w-3" />
+            </button>
+          )}
+        </div>
+      </header>
 
       {/* 3. TITLE / BRIEFING MODAL */}
       {gameState === 'TITLE' && (

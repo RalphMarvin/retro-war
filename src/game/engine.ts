@@ -155,6 +155,16 @@ export class GameEngine {
     this.gameState = 'PLAYING';
     this.onStateChange?.(this.gameState);
 
+    // Explicitly reset all firing and input states so redeploy never auto-fires
+    this.isTouchFiring = false;
+    this.isMouseDown = false;
+    this.keys = {};
+    this.touchMove = { x: 0, y: 0 };
+    this.touchAim = null;
+    this.lockedEnemy = null;
+    this.screenShake = 0;
+    this.muzzleLightTimer = 0;
+
     // Reset everything
     this.terrain.clearDecals();
     this.bulletPool.clear();
@@ -234,9 +244,13 @@ export class GameEngine {
       moveY = this.touchMove.y;
     }
 
+    const zoom = this.isMobileMode ? 0.80 : 1.0;
+    const viewW = this.width / zoom;
+    const viewH = this.height / zoom;
+
     // World aim position
-    let aimWorldX = this.cameraX + this.mousePos.x;
-    let aimWorldY = this.cameraY + this.mousePos.y;
+    let aimWorldX = this.cameraX + this.mousePos.x / zoom;
+    let aimWorldY = this.cameraY + this.mousePos.y / zoom;
 
     if (this.touchAim) {
       aimWorldX = this.player.x + this.touchAim.x * 200;
@@ -246,16 +260,30 @@ export class GameEngine {
     const wantsFire = this.isMouseDown || !!this.keys['space'] || this.isTouchFiring;
 
     // Mobile Tactical Auto-Lock Aiming:
-    // When firing on mobile or with touch controls, acquire and track the nearest active hostile
+    // Only lock onto active hostiles currently visible within the camera viewport frame!
     if (this.isMobileMode || this.isTouchFiring) {
+      const camLeft = this.cameraX;
+      const camRight = this.cameraX + viewW;
+      const camTop = this.cameraY;
+      const camBottom = this.cameraY + viewH;
+
       let closestEnemy: Enemy | null = null;
-      let closestDist = 800; // max tactical engagement acquisition distance
+      let closestDist = Infinity;
       const activeEnemies = this.enemyPool.getActiveEnemies();
       for (const e of activeEnemies) {
-        const d = Math.hypot(e.x - this.player.x, e.y - this.player.y);
-        if (d < closestDist) {
-          closestDist = d;
-          closestEnemy = e;
+        // Hostile must be within visible screen frame
+        const inFrame =
+          e.x >= camLeft - e.radius &&
+          e.x <= camRight + e.radius &&
+          e.y >= camTop - e.radius &&
+          e.y <= camBottom + e.radius;
+
+        if (inFrame) {
+          const d = Math.hypot(e.x - this.player.x, e.y - this.player.y);
+          if (d < closestDist) {
+            closestDist = d;
+            closestEnemy = e;
+          }
         }
       }
       this.lockedEnemy = closestEnemy;
@@ -264,7 +292,7 @@ export class GameEngine {
         aimWorldX = closestEnemy.x;
         aimWorldY = closestEnemy.y;
       } else if (Math.hypot(this.player.vx, this.player.vy) > 10) {
-        // Aim in movement heading if no hostile in range
+        // Aim in movement heading if no hostile in frame
         aimWorldX = this.player.x + this.player.vx;
         aimWorldY = this.player.y + this.player.vy;
       }
@@ -304,9 +332,9 @@ export class GameEngine {
     this.player.x = Math.max(wallMargin, Math.min(this.terrain.width - wallMargin, this.player.x));
     this.player.y = Math.max(wallMargin, Math.min(this.terrain.height - wallMargin, this.player.y));
 
-    // 2. Camera tracking player with smooth easing
-    const targetCamX = this.player.x - this.width / 2;
-    const targetCamY = this.player.y - this.height / 2;
+    // 2. Camera tracking player with smooth easing adjusted for zoom
+    const targetCamX = this.player.x - viewW / 2;
+    const targetCamY = this.player.y - viewH / 2;
     this.cameraX += (targetCamX - this.cameraX) * Math.min(1, dt * 10);
     this.cameraY += (targetCamY - this.cameraY) * Math.min(1, dt * 10);
 
@@ -505,6 +533,9 @@ export class GameEngine {
    */
   private render() {
     const ctx = this.ctx;
+    const zoom = this.isMobileMode ? 0.80 : 1.0;
+    const viewW = this.width / zoom;
+    const viewH = this.height / zoom;
 
     // Clear
     ctx.fillStyle = '#0a0d10';
@@ -519,8 +550,11 @@ export class GameEngine {
       ctx.translate(shakeX, shakeY);
     }
 
+    // Apply Camera Zoom scaling on mobile
+    ctx.scale(zoom, zoom);
+
     // 1. Draw bunker terrain and permanent scorch decals
-    this.terrain.draw(ctx, this.cameraX, this.cameraY, this.width, this.height);
+    this.terrain.draw(ctx, this.cameraX, this.cameraY, viewW, viewH);
 
     // Apply Camera transform for actors and dynamic objects
     ctx.save();
@@ -680,8 +714,9 @@ export class GameEngine {
     if (this.gameState !== 'PLAYING') return;
     if (this.isMobileMode && !this.isMouseDown) return;
 
-    const x = this.mousePos.x;
-    const y = this.mousePos.y;
+    const zoom = this.isMobileMode ? 0.80 : 1.0;
+    const x = this.mousePos.x / zoom;
+    const y = this.mousePos.y / zoom;
     const spread = this.player.weapon.currentSpread * 140;
 
     ctx.save();

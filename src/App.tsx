@@ -99,7 +99,12 @@ export default function App() {
   }, []);
 
   const handleStartGame = () => {
-    engineRef.current?.startGame();
+    if (engineRef.current) {
+      engineRef.current.isTouchFiring = false;
+      engineRef.current.isMouseDown = false;
+      engineRef.current.touchMove = { x: 0, y: 0 };
+      engineRef.current.startGame();
+    }
   };
 
   const handleTogglePause = () => {
