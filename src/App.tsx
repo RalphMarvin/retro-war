@@ -151,7 +151,7 @@ export default function App() {
       {/* Main Game Canvas */}
       <canvas
         ref={canvasRef}
-        className="absolute inset-0 block h-full w-full cursor-crosshair"
+        className="absolute inset-0 z-0 block h-full w-full cursor-crosshair"
       />
 
       {/* Tactical Sci-Fi HUD */}

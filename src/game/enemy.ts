@@ -9,6 +9,7 @@ import { ParticlePool } from './particles';
 import { EnemyType } from './types';
 
 export class Enemy {
+  public readonly id: number;
   public active: boolean = false;
   public type: EnemyType = 'drone';
   public x: number = 0;
@@ -33,6 +34,10 @@ export class Enemy {
 
   // Mech specific
   public treadCycle: number = 0;
+
+  constructor(id: number = 0) {
+    this.id = id;
+  }
 
   public reset() {
     this.active = false;
@@ -464,7 +469,7 @@ export class EnemyPool {
 
   constructor(size: number = 60) {
     for (let i = 0; i < size; i++) {
-      this.pool.push(new Enemy());
+      this.pool.push(new Enemy(i));
     }
   }
 

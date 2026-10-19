@@ -20,6 +20,7 @@ export interface BattleFrame {
     isMoving: boolean;
   };
   enemies: Array<{
+    id: number;
     x: number;
     y: number;
     type: 'drone' | 'mech';
@@ -649,6 +650,45 @@ export class GameEngine {
     ctx.restore(); // remove screen shake
 
     this.onSceneUpdate?.(this.getSceneState());
+  }
+
+  private getSceneState(): BattleFrame {
+    return {
+      player: {
+        x: this.player.x,
+        y: this.player.y,
+        angle: this.player.currentAngle,
+        health: this.player.health,
+        isMoving: this.player.isMoving,
+      },
+      enemies: this.enemyPool.getActiveEnemies().map((enemy) => ({
+        id: enemy.id,
+        x: enemy.x,
+        y: enemy.y,
+        type: enemy.type,
+        health: enemy.health,
+        maxHealth: enemy.maxHealth,
+        active: enemy.active,
+      })),
+      pickups: this.pickups.map((pickup) => ({
+        x: pickup.x,
+        y: pickup.y,
+        type: pickup.type,
+      })),
+      cameraX: this.cameraX,
+      cameraY: this.cameraY,
+      width: this.width,
+      height: this.height,
+      isMobileMode: this.isMobileMode,
+      wave: this.stats.wave,
+      flash: {
+        x: this.muzzleLightPos.x,
+        y: this.muzzleLightPos.y,
+        active: this.muzzleLightTimer > 0,
+        intensity: Math.max(0, this.muzzleLightTimer / 0.06),
+      },
+      gameState: this.gameState,
+    };
   }
 
   private drawTargetLock(ctx: CanvasRenderingContext2D, enemy: Enemy) {

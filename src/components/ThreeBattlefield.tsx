@@ -21,6 +21,11 @@ export const ThreeBattlefield: React.FC<ThreeBattlefieldProps> = ({ frame }) => 
   const enemyRefs = useRef<Map<string, THREE.Group>>(new Map());
   const pickupRefs = useRef<Map<string, THREE.Group>>(new Map());
   const animationRef = useRef<number | null>(null);
+  const frameRef = useRef<BattleFrame | null>(frame);
+
+  useEffect(() => {
+    frameRef.current = frame;
+  }, [frame]);
 
   useEffect(() => {
     if (!mountRef.current) return;
@@ -118,11 +123,12 @@ export const ThreeBattlefield: React.FC<ThreeBattlefieldProps> = ({ frame }) => 
     const animate = () => {
       animationRef.current = requestAnimationFrame(animate);
 
-      if (frame && worldRef.current) {
+      const currentFrame = frameRef.current;
+      if (currentFrame && worldRef.current) {
         const cameraTarget = new THREE.Vector3(
-          frame.player.x - frame.cameraX,
+          currentFrame.player.x - currentFrame.cameraX,
           24,
-          frame.player.y - frame.cameraY
+          currentFrame.player.y - currentFrame.cameraY
         );
 
         const desiredCamera = new THREE.Vector3(
@@ -137,13 +143,13 @@ export const ThreeBattlefield: React.FC<ThreeBattlefieldProps> = ({ frame }) => 
         const player = playerRef.current;
         if (player) {
           const target = new THREE.Vector3(
-            frame.player.x - frame.cameraX,
-            frame.player.health > 0 ? 20 : 8,
-            frame.player.y - frame.cameraY
+            currentFrame.player.x - currentFrame.cameraX,
+            currentFrame.player.health > 0 ? 20 : 8,
+            currentFrame.player.y - currentFrame.cameraY
           );
           player.position.lerp(target, 0.18);
-          player.rotation.y = -frame.player.angle + Math.PI / 2;
-          player.scale.y = frame.player.isMoving ? 1.08 : 1;
+          player.rotation.y = -currentFrame.player.angle + Math.PI / 2;
+          player.scale.y = currentFrame.player.isMoving ? 1.08 : 1;
         }
       }
 
@@ -169,7 +175,7 @@ export const ThreeBattlefield: React.FC<ThreeBattlefieldProps> = ({ frame }) => 
     const enemyMap = new Map<string, THREE.Group>();
     for (const enemy of frame.enemies) {
       if (!enemy.active) continue;
-      const key = `${enemy.type}-${enemy.x.toFixed(1)}-${enemy.y.toFixed(1)}`;
+      const key = `${enemy.id}-${enemy.type}`;
       let group = enemyRefs.current.get(key);
       if (!group) {
         group = new THREE.Group();
@@ -255,6 +261,6 @@ export const ThreeBattlefield: React.FC<ThreeBattlefieldProps> = ({ frame }) => 
     }
   }, [frame]);
 
-  return <div ref={mountRef} className="absolute inset-0 z-0 pointer-events-none" />;
+  return <div ref={mountRef} className="pointer-events-none absolute inset-0 z-10" />;
 };
 
