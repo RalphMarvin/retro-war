@@ -4,15 +4,9 @@
  */
 
 import React from 'react';
-import { Smartphone, RotateCw, Play } from 'lucide-react';
+import { Smartphone, RotateCw } from 'lucide-react';
 
-interface PortraitOverlayProps {
-  onBypassPortrait?: () => void;
-}
-
-export const PortraitOverlay: React.FC<PortraitOverlayProps> = ({
-  onBypassPortrait,
-}) => {
+export const PortraitOverlay: React.FC = () => {
   return (
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-slate-950/95 p-6 text-center backdrop-blur-xl select-none">
       <div className="relative mb-5 flex h-20 w-20 items-center justify-center">
@@ -40,15 +34,6 @@ export const PortraitOverlay: React.FC<PortraitOverlayProps> = ({
         </div>
       </div>
 
-      {onBypassPortrait && (
-        <button
-          onClick={onBypassPortrait}
-          className="mt-5 flex items-center gap-1.5 rounded-lg border border-cyan-500/40 bg-cyan-950/50 px-4 py-2 text-xs font-semibold text-cyan-300 shadow-md transition-transform active:scale-95 hover:bg-cyan-900/40"
-        >
-          <Play className="h-3.5 w-3.5 fill-cyan-300" />
-          Continue in Portrait Mode
-        </button>
-      )}
     </div>
   );
 };
