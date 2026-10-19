@@ -617,7 +617,7 @@ export class GameEngine {
     ctx.save();
     ctx.translate(enemy.x, enemy.y);
     const pulse = 1 + Math.sin(performance.now() * 0.012) * 0.12;
-    const size = (enemy.radius + 11) * pulse;
+    const size = (enemy.radius + 7) * pulse;
 
     ctx.strokeStyle = '#ef4444';
     ctx.lineWidth = 1.8;
