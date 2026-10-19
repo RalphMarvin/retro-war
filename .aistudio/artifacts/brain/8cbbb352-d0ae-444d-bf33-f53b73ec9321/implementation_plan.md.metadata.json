@@ -1,6 +1,6 @@
 {
-  "summary": "Implementation plan to fix iOS orientation handling by replacing the non-functional button with physical rotation guidance and bypass, restore continuous rapid fire on mobile by isolating touch identifiers, and scale down the soldier, weapons, and enemies by 30%.",
-  "updatedAt": "2026-10-19T12:22:41.358971132Z",
+  "summary": "Implementation plan to fix the mobile long-press rapid-fire bug by eliminating render-cycle effect cleanup cancellations, implementing pointer capture with webkit callout suppression, and memoizing control callbacks.",
+  "updatedAt": "2026-10-19T12:54:42.275235400Z",
   "requestFeedback": true,
   "userFacing": true
 }
