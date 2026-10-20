@@ -63,15 +63,15 @@ export class Enemy {
     this.hitFlashTimer = 0;
 
     if (type === 'drone') {
-      // Fast, agile autonomous quad-rotor drone: takes 2-3 rifle hits (scaled down by 30%)
-      this.radius = 12;
+      // Fast, agile autonomous quad-rotor drone: takes 2-3 rifle hits
+      this.radius = 17;
       this.speed = (135 + Math.random() * 30) * Math.min(1.4, 0.95 + waveMultiplier * 0.05);
       this.health = Math.round(75 * waveMultiplier);
       this.maxHealth = this.health;
       this.damage = 12;
     } else {
-      // Heavy Combat Mech: armored front mantlet, dual autocannons (scaled down by 30%)
-      this.radius = 18;
+      // Heavy Combat Mech: armored front mantlet, dual autocannons: takes 6-8 rifle hits
+      this.radius = 26;
       this.speed = (80 + Math.random() * 20) * Math.min(1.3, 0.9 + waveMultiplier * 0.04);
       this.health = Math.round(230 * waveMultiplier);
       this.maxHealth = this.health;
@@ -172,8 +172,6 @@ export class Enemy {
 
     ctx.save();
     ctx.translate(this.x, this.y);
-    // Downscale enemies by 30%
-    ctx.scale(0.70, 0.70);
 
     // 1. Drop shadow onto bunker floor
     ctx.save();
@@ -441,9 +439,9 @@ export class Enemy {
    */
   private drawHealthBar(ctx: CanvasRenderingContext2D) {
     ctx.save();
-    const barWidth = this.type === 'mech' ? 24 : 16;
-    const barHeight = 2.8;
-    const barY = this.y - this.radius - 6;
+    const barWidth = this.type === 'mech' ? 36 : 24;
+    const barHeight = 3.5;
+    const barY = this.y - this.radius - 8;
     const barX = this.x - barWidth / 2;
 
     // Background track

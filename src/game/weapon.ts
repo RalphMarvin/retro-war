@@ -141,9 +141,10 @@ export class Weapon {
     this.bodyJolt = 4.5;
     this.currentSpread = Math.min(this.maxSpread, this.currentSpread + 0.018);
 
-    // Muzzle tip world coordinates (scaled by 0.70 to align with 30% downscaled soldier)
-    const sideOffset = 8 * 0.70;
-    const forwardOffset = (38 - this.recoilOffset) * 0.70;
+    // Muzzle tip world coordinates
+    // Rifle sits roughly 12px to the right of soldier center line and extends 36px forward
+    const sideOffset = 8;
+    const forwardOffset = 38 - this.recoilOffset;
     const cos = Math.cos(aimAngle);
     const sin = Math.sin(aimAngle);
     const perpCos = Math.cos(aimAngle + Math.PI / 2);
@@ -153,8 +154,8 @@ export class Weapon {
     const muzzleY = playerY + sin * forwardOffset + perpSin * sideOffset;
 
     // Ejection port position for brass casing
-    const portX = playerX + cos * (forwardOffset - 11.2) + perpCos * (sideOffset + 2.8);
-    const portY = playerY + sin * (forwardOffset - 11.2) + perpSin * (sideOffset + 2.8);
+    const portX = playerX + cos * (forwardOffset - 16) + perpCos * (sideOffset + 4);
+    const portY = playerY + sin * (forwardOffset - 16) + perpSin * (sideOffset + 4);
 
     // Spread angle
     const shotAngle = aimAngle + (Math.random() - 0.5) * this.currentSpread;

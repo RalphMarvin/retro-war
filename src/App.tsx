@@ -19,7 +19,6 @@ export default function App() {
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [isMobile, setIsMobile] = useState<boolean>(false);
   const [isPortrait, setIsPortrait] = useState<boolean>(false);
-  const [portraitBypassed, setPortraitBypassed] = useState<boolean>(false);
 
   const [stats, setStats] = useState<PlayerStats>({
     health: 100,
@@ -54,9 +53,6 @@ export default function App() {
 
       const portraitActive = mobileActive && window.innerHeight > window.innerWidth;
       setIsPortrait(portraitActive);
-      if (!portraitActive) {
-        setPortraitBypassed(false);
-      }
 
       if (engineRef.current) {
         engineRef.current.isMobileMode = mobileActive;
@@ -143,9 +139,9 @@ export default function App() {
       className="relative h-screen w-screen overflow-hidden bg-slate-950"
       style={{ touchAction: 'none' }}
     >
-      {/* Landscape Orientation Lock Guidance on Mobile */}
-      {isMobile && isPortrait && !portraitBypassed && (
-        <PortraitOverlay onBypassPortrait={() => setPortraitBypassed(true)} />
+      {/* Landscape Orientation Lock Enforcement on Mobile */}
+      {isMobile && isPortrait && (
+        <PortraitOverlay onAttemptFullscreenLandscape={handleAttemptFullscreenLandscape} />
       )}
 
       {/* Main Game Canvas */}

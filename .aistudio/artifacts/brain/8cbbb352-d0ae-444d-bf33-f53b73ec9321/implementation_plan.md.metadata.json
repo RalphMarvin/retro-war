@@ -1,6 +1,6 @@
 {
-  "summary": "Implementation plan to fix iOS orientation handling by replacing the non-functional button with physical rotation guidance and bypass, restore continuous rapid fire on mobile by isolating touch identifiers, and scale down the soldier, weapons, and enemies by 30%.",
-  "updatedAt": "2026-10-19T12:22:41.358971132Z",
+  "summary": "Implementation plan for 100% mobile-optimized combat: fixing redeploy auto-fire, embedding compact vitals and ammo meters into an ultra-thin top bar, zooming out the camera for greater battlefield visibility, and restricting auto-lock strictly to on-screen hostiles.",
+  "updatedAt": "2026-10-19T12:10:24.136769766Z",
   "requestFeedback": true,
   "userFacing": true
 }

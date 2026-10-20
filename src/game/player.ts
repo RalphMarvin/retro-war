@@ -13,7 +13,7 @@ export class Player {
   public vx: number = 0;
   public vy: number = 0;
   public speed: number = 220; // pixels per second
-  public radius: number = 14; // collision radius (scaled down by 30%)
+  public radius: number = 20; // collision radius
 
   // Aiming and orientation
   public aimAngle: number = 0;
@@ -132,8 +132,6 @@ export class Player {
   public draw(ctx: CanvasRenderingContext2D) {
     ctx.save();
     ctx.translate(this.x, this.y);
-    // Downscale soldier and weapon by 30%
-    ctx.scale(0.70, 0.70);
 
     // 1. Drop shadow beneath the soldier on the bunker floor
     ctx.save();
