@@ -5,16 +5,17 @@
 
 import React, { useRef, useState, useEffect } from 'react';
 import { Crosshair, RotateCcw } from 'lucide-react';
+import { AmmoState } from '../game/types';
 
 interface MobileControlsProps {
-  isReloading: boolean;
+  ammo: AmmoState;
   onMoveVector: (vec: { x: number; y: number }) => void;
   onFire: (firing: boolean) => void;
   onReload: () => void;
 }
 
 export const MobileControls: React.FC<MobileControlsProps> = ({
-  isReloading,
+  ammo,
   onMoveVector,
   onFire,
   onReload,
@@ -23,40 +24,56 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
   const [isStickActive, setIsStickActive] = useState<boolean>(false);
   const [isTriggerActive, setIsTriggerActive] = useState<boolean>(false);
 
-  // Stable refs for callbacks to prevent any effect teardown on parent re-renders
-  const onFireRef = useRef(onFire);
-  onFireRef.current = onFire;
-  const onMoveVectorRef = useRef(onMoveVector);
-  onMoveVectorRef.current = onMoveVector;
-
   const stickBaseRef = useRef<HTMLDivElement | null>(null);
   const stickTouchIdRef = useRef<number | null>(null);
-  const triggerPointerIdRef = useRef<number | null>(null);
+  const triggerTouchIdRef = useRef<number | null>(null);
 
   const maxRadius = 46;
 
-  // Global cleanup ONLY on mount and true unmount
+  // Handle component unmount and global safety reset only when all touches end
   useEffect(() => {
-    const handleGlobalBlur = () => {
-      triggerPointerIdRef.current = null;
+    setIsTriggerActive(false);
+    setIsStickActive(false);
+    onFire(false);
+    onMoveVector({ x: 0, y: 0 });
+
+    const handleWindowTouchEnd = (e: TouchEvent) => {
+      // Only clear if all fingers have left the screen
+      if (e.touches.length === 0) {
+        triggerTouchIdRef.current = null;
+        stickTouchIdRef.current = null;
+        setIsTriggerActive(false);
+        setIsStickActive(false);
+        setKnobPos({ x: 0, y: 0 });
+        onFire(false);
+        onMoveVector({ x: 0, y: 0 });
+      }
+    };
+
+    const handleWindowBlur = () => {
+      triggerTouchIdRef.current = null;
       stickTouchIdRef.current = null;
       setIsTriggerActive(false);
       setIsStickActive(false);
       setKnobPos({ x: 0, y: 0 });
-      onFireRef.current(false);
-      onMoveVectorRef.current({ x: 0, y: 0 });
+      onFire(false);
+      onMoveVector({ x: 0, y: 0 });
     };
 
-    window.addEventListener('blur', handleGlobalBlur);
+    window.addEventListener('touchend', handleWindowTouchEnd);
+    window.addEventListener('touchcancel', handleWindowTouchEnd);
+    window.addEventListener('blur', handleWindowBlur);
 
     return () => {
-      onFireRef.current(false);
-      onMoveVectorRef.current({ x: 0, y: 0 });
-      window.removeEventListener('blur', handleGlobalBlur);
+      onFire(false);
+      onMoveVector({ x: 0, y: 0 });
+      window.removeEventListener('touchend', handleWindowTouchEnd);
+      window.removeEventListener('touchcancel', handleWindowTouchEnd);
+      window.removeEventListener('blur', handleWindowBlur);
     };
-  }, []);
+  }, [onFire, onMoveVector]);
 
-  // 1. Virtual Movement Joystick (Isolated by stickTouchIdRef)
+  // 1. Joystick Touch Handlers (Isolated by stickTouchIdRef)
   const handleStickStart = (e: React.TouchEvent<HTMLDivElement>) => {
     e.preventDefault();
     if (stickTouchIdRef.current !== null) return;
@@ -87,7 +104,7 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
         stickTouchIdRef.current = null;
         setIsStickActive(false);
         setKnobPos({ x: 0, y: 0 });
-        onMoveVectorRef.current({ x: 0, y: 0 });
+        onMoveVector({ x: 0, y: 0 });
         break;
       }
     }
@@ -105,47 +122,50 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
 
     if (dist <= maxRadius) {
       setKnobPos({ x: dx, y: dy });
-      onMoveVectorRef.current({ x: dx / maxRadius, y: dy / maxRadius });
+      onMoveVector({ x: dx / maxRadius, y: dy / maxRadius });
     } else {
       const angle = Math.atan2(dy, dx);
       const clampedX = Math.cos(angle) * maxRadius;
       const clampedY = Math.sin(angle) * maxRadius;
       setKnobPos({ x: clampedX, y: clampedY });
-      onMoveVectorRef.current({ x: Math.cos(angle), y: Math.sin(angle) });
+      onMoveVector({ x: Math.cos(angle), y: Math.sin(angle) });
     }
   };
 
-  // 2. Fire Trigger: Pointer Events with setPointerCapture for uninterrupted rapid fire
-  const handlePointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
+  // 2. Fire Trigger Touch Handlers (Isolated by triggerTouchIdRef for continuous rapid fire)
+  const handleTriggerStart = (e: React.TouchEvent<HTMLButtonElement>) => {
     e.preventDefault();
-    e.stopPropagation();
-    triggerPointerIdRef.current = e.pointerId;
-    try {
-      e.currentTarget.setPointerCapture(e.pointerId);
-    } catch {}
+    if (triggerTouchIdRef.current !== null) return;
+    const touch = e.changedTouches[0];
+    triggerTouchIdRef.current = touch.identifier;
     setIsTriggerActive(true);
-    onFireRef.current(true);
+    onFire(true);
   };
 
-  const handlePointerUp = (e: React.PointerEvent<HTMLButtonElement>) => {
+  const handleTriggerEnd = (e: React.TouchEvent<HTMLButtonElement>) => {
     e.preventDefault();
-    e.stopPropagation();
-    if (triggerPointerIdRef.current === e.pointerId) {
-      try {
-        e.currentTarget.releasePointerCapture(e.pointerId);
-      } catch {}
-      triggerPointerIdRef.current = null;
-      setIsTriggerActive(false);
-      onFireRef.current(false);
+    if (triggerTouchIdRef.current === null) return;
+    for (let i = 0; i < e.changedTouches.length; i++) {
+      const touch = e.changedTouches[i];
+      if (touch.identifier === triggerTouchIdRef.current) {
+        triggerTouchIdRef.current = null;
+        setIsTriggerActive(false);
+        onFire(false);
+        break;
+      }
     }
   };
 
-  const handlePointerCancel = (e: React.PointerEvent<HTMLButtonElement>) => {
-    if (triggerPointerIdRef.current === e.pointerId) {
-      triggerPointerIdRef.current = null;
-      setIsTriggerActive(false);
-      onFireRef.current(false);
+  const handleMouseDown = (e: React.MouseEvent<HTMLButtonElement>) => {
+    if (e.button === 0) {
+      setIsTriggerActive(true);
+      onFire(true);
     }
+  };
+
+  const handleMouseUp = () => {
+    setIsTriggerActive(false);
+    onFire(false);
   };
 
   return (
@@ -192,45 +212,36 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
         <button
           onTouchStart={(e) => {
             e.preventDefault();
-            e.stopPropagation();
             onReload();
           }}
           onClick={(e) => {
             e.preventDefault();
-            e.stopPropagation();
             onReload();
           }}
+          disabled={ammo.isReloading || ammo.currentMag === 30 || ammo.reserve <= 0}
           aria-label="Tactical Reload"
-          className="flex h-11 w-11 items-center justify-center rounded-full border border-amber-500/40 bg-slate-950/80 text-amber-300 shadow-lg backdrop-blur-sm active:scale-90"
+          className="flex h-11 w-11 items-center justify-center rounded-full border border-amber-500/40 bg-slate-950/80 text-amber-300 shadow-lg backdrop-blur-sm active:scale-90 disabled:opacity-30"
         >
-          <RotateCcw className={`h-4 w-4 ${isReloading ? 'animate-spin' : ''}`} />
+          <RotateCcw className={`h-4 w-4 ${ammo.isReloading ? 'animate-spin' : ''}`} />
         </button>
 
-        {/* Primary Tactile Fire Trigger Button (Continuous Rapid Fire on Hold) */}
+        {/* Primary Tactile Fire Trigger Button (Continuous Rapid Fire) */}
         <button
-          onPointerDown={handlePointerDown}
-          onPointerUp={handlePointerUp}
-          onPointerCancel={handlePointerCancel}
-          onContextMenu={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            return false;
-          }}
-          aria-label="Hold for Rapid Fire (Auto-Lock Nearest On-Screen Hostile)"
+          onTouchStart={handleTriggerStart}
+          onTouchEnd={handleTriggerEnd}
+          onTouchCancel={handleTriggerEnd}
+          onMouseDown={handleMouseDown}
+          onMouseUp={handleMouseUp}
+          onMouseLeave={handleMouseUp}
+          aria-label="Fire Weapon (Auto-Lock Nearest On-Screen Hostile)"
           className={`relative flex h-22 w-22 items-center justify-center rounded-full border-2 shadow-2xl backdrop-blur-md transition-transform duration-75 active:scale-95 ${
             isTriggerActive
               ? 'border-amber-400 bg-gradient-to-br from-amber-600 to-red-600 scale-95 shadow-amber-500/60'
               : 'border-cyan-500/60 bg-gradient-to-br from-slate-900/90 to-cyan-950/80 shadow-cyan-950/60'
           }`}
-          style={{
-            touchAction: 'none',
-            WebkitTouchCallout: 'none',
-            WebkitUserSelect: 'none',
-            userSelect: 'none',
-          }}
         >
           {/* Inner ring */}
-          <div className="flex h-16 w-16 items-center justify-center rounded-full border border-white/20 pointer-events-none">
+          <div className="flex h-16 w-16 items-center justify-center rounded-full border border-white/20">
             <Crosshair
               className={`h-8 w-8 ${
                 isTriggerActive ? 'text-white animate-pulse' : 'text-cyan-300'
@@ -239,7 +250,7 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
           </div>
 
           {/* Trigger label */}
-          <div className="absolute -bottom-1.5 rounded border border-cyan-950 bg-slate-950/90 px-1.5 py-0.5 text-[8px] font-bold tracking-wider text-cyan-300 uppercase pointer-events-none">
+          <div className="absolute -bottom-1.5 rounded border border-cyan-950 bg-slate-950/90 px-1.5 py-0.5 text-[8px] font-bold tracking-wider text-cyan-300 uppercase">
             RAPID FIRE
           </div>
         </button>

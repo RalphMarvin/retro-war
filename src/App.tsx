@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { MobileControls } from './components/MobileControls';
 import { PortraitOverlay } from './components/PortraitOverlay';
 import { TacticalHUD } from './components/TacticalHUD';
@@ -102,39 +102,41 @@ export default function App() {
     };
   }, []);
 
-  const handleStartGame = useCallback(() => {
+  const handleStartGame = () => {
     if (engineRef.current) {
       engineRef.current.isTouchFiring = false;
       engineRef.current.isMouseDown = false;
       engineRef.current.touchMove = { x: 0, y: 0 };
       engineRef.current.startGame();
     }
-  }, []);
+  };
 
-  const handleTogglePause = useCallback(() => {
+  const handleTogglePause = () => {
     engineRef.current?.togglePause();
-  }, []);
+  };
 
-  const handleReload = useCallback(() => {
+  const handleReload = () => {
     engineRef.current?.player.weapon.startReload();
-  }, []);
+  };
 
-  const handleToggleMute = useCallback(() => {
+  const handleToggleMute = () => {
     const muted = soundSynth.toggleMute();
     setIsMuted(muted);
-  }, []);
+  };
 
-  const handleMoveVector = useCallback((vec: { x: number; y: number }) => {
-    if (engineRef.current) {
-      engineRef.current.touchMove = vec;
+  const handleAttemptFullscreenLandscape = async () => {
+    try {
+      if (document.documentElement.requestFullscreen) {
+        await document.documentElement.requestFullscreen();
+      }
+      const orientation = screen.orientation as unknown as { lock?: (type: string) => Promise<void> };
+      if (orientation && orientation.lock) {
+        await orientation.lock('landscape');
+      }
+    } catch {
+      // Ignored if browser restricts orientation lock
     }
-  }, []);
-
-  const handleFire = useCallback((firing: boolean) => {
-    if (engineRef.current) {
-      engineRef.current.isTouchFiring = firing;
-    }
-  }, []);
+  };
 
   return (
     <div
@@ -167,9 +169,17 @@ export default function App() {
       {/* Mobile Touch Controls (Left Virtual Joystick & Right Auto-Aim Trigger) */}
       {isMobile && gameState === 'PLAYING' && (
         <MobileControls
-          isReloading={ammo.isReloading}
-          onMoveVector={handleMoveVector}
-          onFire={handleFire}
+          ammo={ammo}
+          onMoveVector={(vec) => {
+            if (engineRef.current) {
+              engineRef.current.touchMove = vec;
+            }
+          }}
+          onFire={(firing) => {
+            if (engineRef.current) {
+              engineRef.current.isTouchFiring = firing;
+            }
+          }}
           onReload={handleReload}
         />
       )}
