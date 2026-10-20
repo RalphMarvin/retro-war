@@ -57,13 +57,15 @@ class SoundSynthesizer {
   }
 
   /**
-   * Powerful assault rifle gunshot sound with punch, transient snap, and noise decay
+   * Gunshot report. The carbine has a deep body thud and long gas decay, while the
+   * sidearm is tighter, higher and snappier.
    */
-  public playGunshot() {
+  public playGunshot(weapon: 'rifle' | 'pistol' = 'rifle') {
     if (this.isMuted) return;
     this.initContext();
     if (!this.ctx || !this.masterGain || !this.noiseBuffer) return;
 
+    const isPistol = weapon === 'pistol';
     const t = this.ctx.currentTime;
     const pitchMod = 0.95 + Math.random() * 0.1;
 
@@ -71,11 +73,11 @@ class SoundSynthesizer {
     const punchOsc = this.ctx.createOscillator();
     const punchGain = this.ctx.createGain();
     punchOsc.type = 'triangle';
-    punchOsc.frequency.setValueAtTime(145 * pitchMod, t);
-    punchOsc.frequency.exponentialRampToValueAtTime(32, t + 0.08);
+    punchOsc.frequency.setValueAtTime((isPistol ? 210 : 145) * pitchMod, t);
+    punchOsc.frequency.exponentialRampToValueAtTime(isPistol ? 55 : 32, t + (isPistol ? 0.06 : 0.08));
 
-    punchGain.gain.setValueAtTime(1.0, t);
-    punchGain.gain.exponentialRampToValueAtTime(0.001, t + 0.09);
+    punchGain.gain.setValueAtTime(isPistol ? 0.75 : 1.0, t);
+    punchGain.gain.exponentialRampToValueAtTime(0.001, t + (isPistol ? 0.07 : 0.09));
 
     punchOsc.connect(punchGain);
     punchGain.connect(this.masterGain);
@@ -86,35 +88,87 @@ class SoundSynthesizer {
     const noiseSource = this.ctx.createBufferSource();
     noiseSource.buffer = this.noiseBuffer;
 
+    const noiseTail = isPistol ? 0.085 : 0.12;
     const noiseFilter = this.ctx.createBiquadFilter();
-    noiseFilter.type = 'lowpass';
-    noiseFilter.frequency.setValueAtTime(3400 * pitchMod, t);
-    noiseFilter.frequency.exponentialRampToValueAtTime(450, t + 0.12);
+    noiseFilter.type = isPistol ? 'bandpass' : 'lowpass';
+    noiseFilter.frequency.setValueAtTime((isPistol ? 2600 : 3400) * pitchMod, t);
+    noiseFilter.frequency.exponentialRampToValueAtTime(isPistol ? 900 : 450, t + noiseTail);
+    if (isPistol) noiseFilter.Q.value = 1.4;
 
     const noiseGain = this.ctx.createGain();
-    noiseGain.gain.setValueAtTime(0.85, t);
-    noiseGain.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+    noiseGain.gain.setValueAtTime(isPistol ? 0.7 : 0.85, t);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, t + noiseTail);
 
     noiseSource.connect(noiseFilter);
     noiseFilter.connect(noiseGain);
     noiseGain.connect(this.masterGain);
     noiseSource.start(t);
-    noiseSource.stop(t + 0.13);
+    noiseSource.stop(t + noiseTail + 0.01);
 
     // 3. Sharp mechanical crack / breech snap
     const snapOsc = this.ctx.createOscillator();
     const snapGain = this.ctx.createGain();
     snapOsc.type = 'sawtooth';
-    snapOsc.frequency.setValueAtTime(800 * pitchMod, t);
-    snapOsc.frequency.exponentialRampToValueAtTime(100, t + 0.025);
+    snapOsc.frequency.setValueAtTime((isPistol ? 1250 : 800) * pitchMod, t);
+    snapOsc.frequency.exponentialRampToValueAtTime(isPistol ? 180 : 100, t + 0.025);
 
-    snapGain.gain.setValueAtTime(0.4, t);
+    snapGain.gain.setValueAtTime(isPistol ? 0.5 : 0.4, t);
     snapGain.gain.exponentialRampToValueAtTime(0.001, t + 0.03);
 
     snapOsc.connect(snapGain);
     snapGain.connect(this.masterGain);
     snapOsc.start(t);
     snapOsc.stop(t + 0.035);
+
+    // 4. Pistol slide cycling back into battery
+    if (isPistol) {
+      const slideOsc = this.ctx.createOscillator();
+      const slideGain = this.ctx.createGain();
+      slideOsc.type = 'square';
+      slideOsc.frequency.setValueAtTime(420, t + 0.045);
+      slideOsc.frequency.exponentialRampToValueAtTime(160, t + 0.11);
+      slideGain.gain.setValueAtTime(0.12, t + 0.045);
+      slideGain.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+      slideOsc.connect(slideGain);
+      slideGain.connect(this.masterGain);
+      slideOsc.start(t + 0.045);
+      slideOsc.stop(t + 0.13);
+    }
+  }
+
+  /**
+   * Quick holster / draw rack used when swapping between the carbine and sidearm
+   */
+  public playWeaponSwap() {
+    if (this.isMuted) return;
+    this.initContext();
+    if (!this.ctx || !this.masterGain) return;
+
+    const t = this.ctx.currentTime;
+
+    const holster = this.ctx.createOscillator();
+    const holsterGain = this.ctx.createGain();
+    holster.type = 'triangle';
+    holster.frequency.setValueAtTime(260, t);
+    holster.frequency.exponentialRampToValueAtTime(120, t + 0.08);
+    holsterGain.gain.setValueAtTime(0.22, t);
+    holsterGain.gain.exponentialRampToValueAtTime(0.001, t + 0.09);
+    holster.connect(holsterGain);
+    holsterGain.connect(this.masterGain);
+    holster.start(t);
+    holster.stop(t + 0.1);
+
+    const rack = this.ctx.createOscillator();
+    const rackGain = this.ctx.createGain();
+    rack.type = 'sawtooth';
+    rack.frequency.setValueAtTime(760, t + 0.1);
+    rack.frequency.exponentialRampToValueAtTime(240, t + 0.2);
+    rackGain.gain.setValueAtTime(0.2, t + 0.1);
+    rackGain.gain.exponentialRampToValueAtTime(0.001, t + 0.21);
+    rack.connect(rackGain);
+    rackGain.connect(this.masterGain);
+    rack.start(t + 0.1);
+    rack.stop(t + 0.22);
   }
 
   /**

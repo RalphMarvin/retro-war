@@ -6,36 +6,124 @@
 import { soundSynth } from './audio';
 import { BulletPool } from './bullets';
 import { ParticlePool } from './particles';
+import { WeaponConfig, WeaponId } from './types';
+
+/**
+ * Tactical loadout definitions.
+ * The rifle is a sustained-fire automatic; the sidearm is a hard-hitting semi-auto
+ * that only cycles one round per trigger pull (no rapid fire).
+ */
+export const WEAPON_CONFIGS: Record<WeaponId, WeaponConfig> = {
+  rifle: {
+    id: 'rifle',
+    name: 'M4A1 Tactical Carbine',
+    shortName: 'M4A1',
+    fireMode: 'auto',
+    fireInterval: 0.1, // 10 rounds/sec sustained
+    damage: 38,
+    bulletSpeed: 22,
+    baseSpread: 0.045,
+    maxSpread: 0.12,
+    spreadGain: 0.018,
+    magCapacity: 30,
+    startingReserve: 180,
+    maxReserve: 360,
+    ammoPickupAmount: 60,
+    reloadDuration: 1.8,
+    recoilKick: 8.5,
+    bodyJolt: 4.5,
+    screenShake: 2.2,
+    muzzleForward: 38,
+    muzzleSide: 8,
+    gripOffset: { x: 14, y: 8 },
+  },
+  pistol: {
+    id: 'pistol',
+    name: 'MK23 Combat Sidearm',
+    shortName: 'MK23',
+    fireMode: 'semi',
+    fireInterval: 0.16, // mechanical cycle limit between trigger pulls
+    damage: 56,
+    bulletSpeed: 25,
+    baseSpread: 0.018,
+    maxSpread: 0.07,
+    spreadGain: 0.03,
+    magCapacity: 12,
+    startingReserve: 96,
+    maxReserve: 180,
+    ammoPickupAmount: 36,
+    reloadDuration: 1.15,
+    recoilKick: 6,
+    bodyJolt: 3.2,
+    screenShake: 1.6,
+    muzzleForward: 24,
+    muzzleSide: 6,
+    gripOffset: { x: 16, y: 9 },
+  },
+};
 
 export class Weapon {
-  public name: string = 'M4A1 Tactical Carbine';
-  public fireRate: number = 10; // rounds/sec (0.10s interval)
-  public fireInterval: number = 0.10;
+  public readonly config: WeaponConfig;
+  public readonly id: WeaponId;
+  public name: string;
+  public fireInterval: number;
   public fireCooldown: number = 0;
-  public damage: number = 38;
-  public bulletSpeed: number = 22;
-  public baseSpread: number = 0.045; // slight tactical spread
-  public currentSpread: number = 0.045;
-  public maxSpread: number = 0.12;
+  public damage: number;
+  public bulletSpeed: number;
+  public baseSpread: number;
+  public currentSpread: number;
+  public maxSpread: number;
 
-  // Magazine & Ammo state
-  public magCapacity: number = 30;
-  public currentMag: number = 30;
-  public reserveAmmo: number = 180;
+  // Magazine & Ammo state (persisted per weapon across swaps)
+  public magCapacity: number;
+  public currentMag: number;
+  public reserveAmmo: number;
   public isReloading: boolean = false;
   public reloadTimer: number = 0;
-  public reloadDuration: number = 1.8; // seconds
+  public reloadDuration: number;
+
+  // Lifetime round counter — survives weapon switching
+  public shotsFired: number = 0;
 
   // Recoil mechanics
   public recoilOffset: number = 0; // backward kick in pixels
-  public maxRecoilKick: number = 8.5;
+  public maxRecoilKick: number;
   public recoilAngle: number = 0; // slight muzzle climb
   public bodyJolt: number = 0; // passed to player body
+
+  // Semi-auto trigger discipline — must release before the next round
+  private triggerLatched: boolean = false;
 
   // Sound reload stages flags
   private reloadStage1: boolean = false;
   private reloadStage2: boolean = false;
   private reloadStage3: boolean = false;
+
+  constructor(id: WeaponId = 'rifle') {
+    const config = WEAPON_CONFIGS[id];
+    this.config = config;
+    this.id = config.id;
+    this.name = config.name;
+    this.fireInterval = config.fireInterval;
+    this.damage = config.damage;
+    this.bulletSpeed = config.bulletSpeed;
+    this.baseSpread = config.baseSpread;
+    this.currentSpread = config.baseSpread;
+    this.maxSpread = config.maxSpread;
+    this.magCapacity = config.magCapacity;
+    this.currentMag = config.magCapacity;
+    this.reserveAmmo = config.startingReserve;
+    this.reloadDuration = config.reloadDuration;
+    this.maxRecoilKick = config.recoilKick;
+  }
+
+  public get fireMode() {
+    return this.config.fireMode;
+  }
+
+  public get shortName() {
+    return this.config.shortName;
+  }
 
   public update(dt: number) {
     if (this.fireCooldown > 0) {
@@ -77,6 +165,11 @@ export class Weapon {
     }
   }
 
+  /** Called when the fire input is fully released (resets the semi-auto trigger latch) */
+  public releaseTrigger() {
+    this.triggerLatched = false;
+  }
+
   public startReload(): boolean {
     if (this.isReloading || this.currentMag === this.magCapacity || this.reserveAmmo <= 0) {
       return false;
@@ -89,6 +182,11 @@ export class Weapon {
     return true;
   }
 
+  public cancelReload() {
+    this.isReloading = false;
+    this.reloadTimer = 0;
+  }
+
   private completeReload() {
     const needed = this.magCapacity - this.currentMag;
     const toLoad = Math.min(needed, this.reserveAmmo);
@@ -99,11 +197,25 @@ export class Weapon {
   }
 
   public addAmmo(amount: number) {
-    this.reserveAmmo = Math.min(360, this.reserveAmmo + amount);
+    this.reserveAmmo = Math.min(this.config.maxReserve, this.reserveAmmo + amount);
   }
 
   public canShoot(): boolean {
     return !this.isReloading && this.currentMag > 0 && this.fireCooldown <= 0;
+  }
+
+  public reset() {
+    this.currentMag = this.config.magCapacity;
+    this.reserveAmmo = this.config.startingReserve;
+    this.isReloading = false;
+    this.reloadTimer = 0;
+    this.fireCooldown = 0;
+    this.currentSpread = this.baseSpread;
+    this.recoilOffset = 0;
+    this.recoilAngle = 0;
+    this.bodyJolt = 0;
+    this.shotsFired = 0;
+    this.triggerLatched = false;
   }
 
   public shoot(
@@ -112,10 +224,21 @@ export class Weapon {
     aimAngle: number,
     bulletPool: BulletPool,
     particlePool: ParticlePool,
-    onScreenShake: (intensity: number) => void
+    onScreenShake: (intensity: number) => void,
+    triggerEdge: boolean = true
   ): boolean {
     if (this.isReloading) {
       return false;
+    }
+
+    // Semi-automatic discipline: one round per discrete trigger pull
+    if (this.fireMode === 'semi') {
+      if (this.triggerLatched && !triggerEdge) {
+        return false;
+      }
+      if (triggerEdge) {
+        this.triggerLatched = false;
+      }
     }
 
     if (this.currentMag <= 0) {
@@ -133,18 +256,21 @@ export class Weapon {
 
     // Spend bullet
     this.currentMag--;
+    this.shotsFired++;
     this.fireCooldown = this.fireInterval;
+    if (this.fireMode === 'semi') {
+      this.triggerLatched = true;
+    }
 
     // Apply recoil
     this.recoilOffset = this.maxRecoilKick;
-    this.recoilAngle = (Math.random() - 0.5) * 0.04;
-    this.bodyJolt = 4.5;
-    this.currentSpread = Math.min(this.maxSpread, this.currentSpread + 0.018);
+    this.recoilAngle = (Math.random() - 0.5) * (this.id === 'pistol' ? 0.06 : 0.04);
+    this.bodyJolt = this.config.bodyJolt;
+    this.currentSpread = Math.min(this.maxSpread, this.currentSpread + this.config.spreadGain);
 
     // Muzzle tip world coordinates
-    // Rifle sits roughly 12px to the right of soldier center line and extends 36px forward
-    const sideOffset = 8;
-    const forwardOffset = 38 - this.recoilOffset;
+    const sideOffset = this.config.muzzleSide;
+    const forwardOffset = this.config.muzzleForward - this.recoilOffset;
     const cos = Math.cos(aimAngle);
     const sin = Math.sin(aimAngle);
     const perpCos = Math.cos(aimAngle + Math.PI / 2);
@@ -154,8 +280,9 @@ export class Weapon {
     const muzzleY = playerY + sin * forwardOffset + perpSin * sideOffset;
 
     // Ejection port position for brass casing
-    const portX = playerX + cos * (forwardOffset - 16) + perpCos * (sideOffset + 4);
-    const portY = playerY + sin * (forwardOffset - 16) + perpSin * (sideOffset + 4);
+    const portDrop = this.id === 'pistol' ? 10 : 16;
+    const portX = playerX + cos * (forwardOffset - portDrop) + perpCos * (sideOffset + 4);
+    const portY = playerY + sin * (forwardOffset - portDrop) + perpSin * (sideOffset + 4);
 
     // Spread angle
     const shotAngle = aimAngle + (Math.random() - 0.5) * this.currentSpread;
@@ -169,11 +296,11 @@ export class Weapon {
     // Eject spinning brass shell
     particlePool.emitShell(portX, portY, aimAngle);
 
-    // Gunshot audio
-    soundSynth.playGunshot();
+    // Gunshot audio tuned per weapon
+    soundSynth.playGunshot(this.id);
 
     // Subtle screen shake
-    onScreenShake(2.2);
+    onScreenShake(this.config.screenShake);
 
     // Auto-reload on empty if reserve available
     if (this.currentMag === 0 && this.reserveAmmo > 0) {
@@ -184,8 +311,8 @@ export class Weapon {
   }
 
   /**
-   * Procedural drawing of the assault rifle in local coordinate space:
-   * Origin (0,0) is rifle mount point near shoulder/hands, pointing along +X
+   * Procedural drawing of the weapon in local coordinate space:
+   * Origin (0,0) is the mount point near shoulder/hands, pointing along +X
    */
   public draw(ctx: CanvasRenderingContext2D) {
     ctx.save();
@@ -199,6 +326,117 @@ export class Weapon {
     ctx.translate(-currentRecoil, 0);
     ctx.rotate(this.recoilAngle + reloadTilt);
 
+    if (this.id === 'pistol') {
+      this.drawPistol(ctx);
+    } else {
+      this.drawRifle(ctx);
+    }
+
+    ctx.restore(); // restore transform
+  }
+
+  /**
+   * Compact top-down combat sidearm: slide, polymer frame, rail, tritium sights.
+   */
+  private drawPistol(ctx: CanvasRenderingContext2D) {
+    ctx.save();
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.45)';
+    ctx.shadowBlur = 3;
+    ctx.shadowOffsetX = 1.5;
+    ctx.shadowOffsetY = 2.5;
+
+    // 1. Polymer frame / grip angled back from the trigger guard
+    const gripGrad = ctx.createLinearGradient(-5, 1, -1, 10);
+    gripGrad.addColorStop(0, '#20252b');
+    gripGrad.addColorStop(1, '#101317');
+    ctx.fillStyle = gripGrad;
+    ctx.beginPath();
+    ctx.moveTo(-3.5, 1.5);
+    ctx.lineTo(1.5, 1.5);
+    ctx.lineTo(0, 10.5);
+    ctx.lineTo(-5.5, 9.5);
+    ctx.closePath();
+    ctx.fill();
+
+    // Stippled grip texture
+    ctx.fillStyle = '#2f3741';
+    for (let i = 0; i < 4; i++) {
+      ctx.fillRect(-4 - i * 0.35, 3.4 + i * 1.7, 4.2, 0.8);
+    }
+
+    // Magazine baseplate
+    ctx.fillStyle = '#394250';
+    ctx.fillRect(-5.6, 9.2, 5.8, 1.6);
+
+    // 2. Trigger guard
+    ctx.strokeStyle = '#191d22';
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.arc(3, 3.6, 3.2, Math.PI * 0.1, Math.PI * 0.95);
+    ctx.stroke();
+
+    // Trigger blade
+    ctx.fillStyle = '#4b5563';
+    ctx.fillRect(2.4, 1.6, 1.2, 2.6);
+
+    // 3. Slide (main upper body)
+    const slideGrad = ctx.createLinearGradient(-5, -3.4, 20, 2.4);
+    slideGrad.addColorStop(0, '#2a3039');
+    slideGrad.addColorStop(0.45, '#48515e');
+    slideGrad.addColorStop(1, '#1d222a');
+    ctx.fillStyle = slideGrad;
+    ctx.beginPath();
+    ctx.roundRect(-5.5, -3.4, 25, 5.6, 1.2);
+    ctx.fill();
+
+    // Slide serrations at the rear
+    ctx.fillStyle = '#141820';
+    for (let x = -4.5; x <= 0.5; x += 1.6) {
+      ctx.fillRect(x, -3.2, 0.9, 5.2);
+    }
+
+    // Ejection port with brass glint
+    ctx.fillStyle = '#0f1216';
+    ctx.fillRect(5.5, -3.4, 5.5, 2);
+    ctx.fillStyle = '#d4af37';
+    ctx.fillRect(6.6, -2.9, 3, 1.1);
+
+    // 4. Barrel crown / muzzle
+    ctx.fillStyle = '#5b6673';
+    ctx.fillRect(19.5, -2.2, 3.2, 3.2);
+    ctx.fillStyle = '#0c0f13';
+    ctx.beginPath();
+    ctx.arc(22.4, -0.6, 1.1, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 5. Accessory rail under the dust cover
+    ctx.fillStyle = '#232a33';
+    ctx.fillRect(10, 2.1, 9, 1.8);
+    ctx.fillStyle = '#121519';
+    for (let x = 11; x <= 17.5; x += 2.2) {
+      ctx.fillRect(x, 2.1, 0.9, 1.8);
+    }
+
+    // 6. Tritium night sights
+    ctx.fillStyle = '#0d1014';
+    ctx.fillRect(-3.5, -5.2, 2.6, 2);
+    ctx.fillRect(16.5, -5, 2, 1.8);
+
+    ctx.fillStyle = '#34d399';
+    ctx.shadowColor = '#34d399';
+    ctx.shadowBlur = 3;
+    ctx.beginPath();
+    ctx.arc(-2.2, -4.2, 0.7, 0, Math.PI * 2);
+    ctx.arc(17.5, -4.1, 0.7, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+  }
+
+  /**
+   * Full-size tactical assault carbine.
+   */
+  private drawRifle(ctx: CanvasRenderingContext2D) {
     // 1. Rifle Drop Shadow onto operative body / ground
     ctx.save();
     ctx.shadowColor = 'rgba(0, 0, 0, 0.45)';
@@ -359,6 +597,7 @@ export class Weapon {
     ctx.fill();
 
     ctx.restore(); // remove shadow
-    ctx.restore(); // restore transform
   }
 }
+
+

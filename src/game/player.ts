@@ -5,7 +5,10 @@
 
 import { BulletPool } from './bullets';
 import { ParticlePool } from './particles';
+import { WeaponId } from './types';
 import { Weapon } from './weapon';
+
+export const WEAPON_ORDER: WeaponId[] = ['rifle', 'pistol'];
 
 export class Player {
   public x: number = 0;
@@ -26,8 +29,11 @@ export class Player {
   public isDead: boolean = false;
   public invulnerabilityTimer: number = 0;
 
-  // Weapon
-  public weapon: Weapon;
+  // Weapon loadout — each weapon keeps its own magazine, reserve and shot counter
+  public weapons: Record<WeaponId, Weapon>;
+  public activeWeaponId: WeaponId = 'rifle';
+  public swapTimer: number = 0;
+  public swapDuration: number = 0.3;
 
   // Walk cycle animation state
   public walkCycle: number = 0;
@@ -37,7 +43,47 @@ export class Player {
   constructor(x: number, y: number) {
     this.x = x;
     this.y = y;
-    this.weapon = new Weapon();
+    this.weapons = {
+      rifle: new Weapon('rifle'),
+      pistol: new Weapon('pistol'),
+    };
+  }
+
+  /** The weapon currently in hand */
+  public get weapon(): Weapon {
+    return this.weapons[this.activeWeaponId];
+  }
+
+  public get isSwapping(): boolean {
+    return this.swapTimer > 0;
+  }
+
+  /** Total rounds discharged across the whole loadout */
+  public get totalShotsFired(): number {
+    return WEAPON_ORDER.reduce((sum, id) => sum + this.weapons[id].shotsFired, 0);
+  }
+
+  /**
+   * Smoothly switch to another weapon. Any in-progress reload on the stowed weapon is
+   * cancelled (its partial magazine is preserved) and a short draw animation plays.
+   */
+  public switchWeapon(id: WeaponId): boolean {
+    if (id === this.activeWeaponId || this.swapTimer > 0 || this.isDead) return false;
+    if (!this.weapons[id]) return false;
+
+    this.weapon.cancelReload();
+    this.weapon.releaseTrigger();
+    this.activeWeaponId = id;
+    this.weapon.releaseTrigger();
+    this.weapon.fireCooldown = Math.max(this.weapon.fireCooldown, this.swapDuration);
+    this.swapTimer = this.swapDuration;
+    return true;
+  }
+
+  public cycleWeapon(): boolean {
+    const idx = WEAPON_ORDER.indexOf(this.activeWeaponId);
+    const next = WEAPON_ORDER[(idx + 1) % WEAPON_ORDER.length];
+    return this.switchWeapon(next);
   }
 
   public update(
@@ -48,6 +94,8 @@ export class Player {
       aimX: number;
       aimY: number;
       isFiring: boolean;
+      triggerEdge: boolean;
+      triggerHeld: boolean;
       wantsReload: boolean;
     },
     bulletPool: BulletPool,
@@ -100,15 +148,31 @@ export class Player {
     this.currentAngle += angleDiff * Math.min(1, dt * this.rotationSpeed);
 
     // 3. Weapon upkeep
+    if (this.swapTimer > 0) {
+      this.swapTimer = Math.max(0, this.swapTimer - dt);
+    }
     this.weapon.update(dt);
 
     if (input.wantsReload) {
       this.weapon.startReload();
     }
 
-    // 4. Firing
-    if (input.isFiring) {
-      this.weapon.shoot(this.x, this.y, this.currentAngle, bulletPool, particlePool, onScreenShake);
+    // 4. Firing (blocked while the new weapon is still being drawn)
+    if (!input.triggerHeld) {
+      // Trigger fully released — re-arm semi-auto weapons
+      this.weapon.releaseTrigger();
+    }
+
+    if (input.isFiring && this.swapTimer <= 0) {
+      this.weapon.shoot(
+        this.x,
+        this.y,
+        this.currentAngle,
+        bulletPool,
+        particlePool,
+        onScreenShake,
+        input.triggerEdge
+      );
     }
   }
 
@@ -164,12 +228,20 @@ export class Player {
     // Draw tactical plate carrier torso
     this.drawTorso(ctx);
 
-    // Draw arms holding the assault rifle
+    // Draw arms holding the current weapon
     this.drawArmsAndHands(ctx);
 
-    // Draw the detailed assault rifle
+    // Draw the active weapon (carbine or sidearm) in the operative's hands
     ctx.save();
-    ctx.translate(14, 8); // position weapon in soldier's hands
+    const grip = this.weapon.config.gripOffset;
+    // Short draw/holster animation while swapping weapons
+    const swapT = this.swapTimer / this.swapDuration;
+    const swapDip = Math.sin(swapT * Math.PI) * 7;
+    ctx.translate(grip.x - swapDip * 0.6, grip.y + swapDip);
+    if (swapT > 0) {
+      ctx.rotate(swapT * 0.5);
+      ctx.globalAlpha = 0.65 + (1 - swapT) * 0.35;
+    }
     this.weapon.draw(ctx);
     ctx.restore();
 
@@ -313,7 +385,9 @@ export class Player {
   }
 
   /**
-   * Tactical arms and articulated shooting gloves gripping the assault rifle
+   * Tactical arms and articulated shooting gloves gripping the active weapon.
+   * The carbine uses an extended support-arm grip on the handguard, while the
+   * sidearm uses a tighter two-handed isosceles stance.
    */
   private drawArmsAndHands(ctx: CanvasRenderingContext2D) {
     ctx.save();
@@ -326,22 +400,33 @@ export class Player {
     ctx.strokeStyle = '#181e16';
     ctx.lineWidth = 1;
 
-    // 1. Right Arm (trigger arm) bending forward to rifle pistol grip
+    const isPistol = this.activeWeaponId === 'pistol';
+
+    // 1. Right Arm (trigger arm) bending forward to the grip
     ctx.beginPath();
     ctx.moveTo(0, 12);
-    ctx.quadraticCurveTo(8, 15, 12, 10);
-    ctx.lineTo(12, 6);
+    ctx.quadraticCurveTo(8, 15, isPistol ? 15 : 12, isPistol ? 8 : 10);
+    ctx.lineTo(isPistol ? 15 : 12, 6);
     ctx.quadraticCurveTo(6, 10, 0, 9);
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
 
-    // 2. Left Arm (support arm) extending forward to grip rifle handguard
+    // 2. Left Arm (support arm)
     ctx.beginPath();
-    ctx.moveTo(1, -12);
-    ctx.quadraticCurveTo(14, -14, 26, -3);
-    ctx.lineTo(24, 0);
-    ctx.quadraticCurveTo(12, -9, 0, -8);
+    if (isPistol) {
+      // Brought in tight to cup the shooting hand
+      ctx.moveTo(1, -12);
+      ctx.quadraticCurveTo(12, -11, 17, 2);
+      ctx.lineTo(14, 4);
+      ctx.quadraticCurveTo(10, -6, 0, -8);
+    } else {
+      // Extended forward to grip rifle handguard
+      ctx.moveTo(1, -12);
+      ctx.quadraticCurveTo(14, -14, 26, -3);
+      ctx.lineTo(24, 0);
+      ctx.quadraticCurveTo(12, -9, 0, -8);
+    }
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
@@ -349,20 +434,23 @@ export class Player {
     // 3. Tactical Gloves (charcoal composite with knuckle protection)
     ctx.fillStyle = '#1e2228';
 
-    // Right hand on trigger grip
+    // Shooting hand on the trigger grip
+    const gripHandX = isPistol ? 13.5 : 11;
     ctx.beginPath();
-    ctx.roundRect(11, 6, 4.5, 4, 1.2);
+    ctx.roundRect(gripHandX, 6, 4.5, 4, 1.2);
     ctx.fill();
 
-    // Left hand gripping handguard
+    // Support hand
+    const supportHandX = isPistol ? 14.5 : 24;
+    const supportHandY = isPistol ? 1 : -4;
     ctx.beginPath();
-    ctx.roundRect(24, -4, 5, 4.5, 1.2);
+    ctx.roundRect(supportHandX, supportHandY, 5, 4.5, 1.2);
     ctx.fill();
 
     // Knuckle pads
     ctx.fillStyle = '#3f4752';
-    ctx.fillRect(12, 7, 2.5, 1.2);
-    ctx.fillRect(25, -3, 2.5, 1.2);
+    ctx.fillRect(gripHandX + 1, 7, 2.5, 1.2);
+    ctx.fillRect(supportHandX + 1, supportHandY + 1, 2.5, 1.2);
 
     ctx.restore();
   }

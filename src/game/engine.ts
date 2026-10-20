@@ -7,9 +7,12 @@ import { soundSynth } from './audio';
 import { BulletPool } from './bullets';
 import { Enemy, EnemyPool } from './enemy';
 import { ParticlePool } from './particles';
-import { Player } from './player';
+import { Player, WEAPON_ORDER } from './player';
 import { BunkerTerrain } from './terrain';
-import { AmmoState, GameState, PickupItem, PlayerStats } from './types';
+import { AmmoState, GameState, PickupItem, PlayerStats, WeaponId } from './types';
+
+/** Hold the trigger longer than this (seconds) to engage sustained rapid fire */
+export const RAPID_FIRE_HOLD_THRESHOLD = 0.22;
 
 export class GameEngine {
   private canvas: HTMLCanvasElement;
@@ -73,9 +76,15 @@ export class GameEngine {
   public isMobileMode: boolean = false;
   public lockedEnemy: Enemy | null = null;
 
+  // Trigger state machine (tap = single shot, long press = rapid fire)
+  private prevTriggerHeld: boolean = false;
+  public triggerHoldTime: number = 0;
+  public isRapidFiring: boolean = false;
+
   // UI Event Callback
   public onStatsUpdate: ((stats: PlayerStats, ammo: AmmoState) => void) | null = null;
   public onStateChange: ((state: GameState) => void) | null = null;
+  public onWeaponChange: ((weaponId: WeaponId) => void) | null = null;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -118,6 +127,13 @@ export class GameEngine {
       this.keys[e.key.toLowerCase()] = true;
       if (e.key.toLowerCase() === 'r' && this.gameState === 'PLAYING') {
         this.player.weapon.startReload();
+      }
+      if (this.gameState === 'PLAYING') {
+        if (e.key === '1') this.switchWeapon('rifle');
+        if (e.key === '2') this.switchWeapon('pistol');
+        if (e.key.toLowerCase() === 'q' || e.key.toLowerCase() === 'tab') {
+          this.cycleWeapon();
+        }
       }
       if (e.key === 'Escape' && (this.gameState === 'PLAYING' || this.gameState === 'PAUSED')) {
         this.togglePause();
@@ -164,6 +180,9 @@ export class GameEngine {
     this.lockedEnemy = null;
     this.screenShake = 0;
     this.muzzleLightTimer = 0;
+    this.prevTriggerHeld = false;
+    this.triggerHoldTime = 0;
+    this.isRapidFiring = false;
 
     // Reset everything
     this.terrain.clearDecals();
@@ -188,10 +207,28 @@ export class GameEngine {
 
     this.startWave(1);
     this.lastTime = performance.now();
+    this.onWeaponChange?.(this.player.activeWeaponId);
 
     if (!this.animFrameId) {
       this.animFrameId = requestAnimationFrame(this.loop.bind(this));
     }
+  }
+
+  /** Swap to a specific weapon in the loadout, preserving each magazine */
+  public switchWeapon(id: WeaponId): boolean {
+    if (this.gameState !== 'PLAYING') return false;
+    const swapped = this.player.switchWeapon(id);
+    if (swapped) {
+      soundSynth.playWeaponSwap();
+      this.onWeaponChange?.(this.player.activeWeaponId);
+    }
+    return swapped;
+  }
+
+  /** Cycle to the next weapon in the loadout */
+  public cycleWeapon(): boolean {
+    const idx = WEAPON_ORDER.indexOf(this.player.activeWeaponId);
+    return this.switchWeapon(WEAPON_ORDER[(idx + 1) % WEAPON_ORDER.length]);
   }
 
   public togglePause() {
@@ -257,7 +294,26 @@ export class GameEngine {
       aimWorldY = this.player.y + this.touchAim.y * 200;
     }
 
-    const wantsFire = this.isMouseDown || !!this.keys['space'] || this.isTouchFiring;
+    const triggerHeld = this.isMouseDown || !!this.keys['space'] || this.isTouchFiring;
+    const triggerEdge = triggerHeld && !this.prevTriggerHeld;
+    this.prevTriggerHeld = triggerHeld;
+
+    // Tap vs. long press: a quick tap sends a single round, holding past the
+    // threshold engages sustained rapid fire on automatic weapons only.
+    if (triggerHeld) {
+      this.triggerHoldTime += dt;
+    } else {
+      this.triggerHoldTime = 0;
+    }
+
+    const activeWeapon = this.player.weapon;
+    const heldLongEnough = this.triggerHoldTime >= RAPID_FIRE_HOLD_THRESHOLD;
+    this.isRapidFiring =
+      triggerHeld && heldLongEnough && activeWeapon.fireMode === 'auto' && !this.player.isSwapping;
+
+    // Semi-auto sidearms only discharge on a fresh trigger pull — never rapid fire
+    const wantsFire =
+      triggerHeld && (activeWeapon.fireMode === 'semi' ? triggerEdge : triggerEdge || heldLongEnough);
 
     // Mobile Tactical Auto-Lock Aiming:
     // Only lock onto active hostiles currently visible within the camera viewport frame!
@@ -300,9 +356,6 @@ export class GameEngine {
       this.lockedEnemy = null;
     }
 
-    // Track shots fired
-    const magBefore = this.player.weapon.currentMag;
-
     // Update Player
     this.player.update(
       dt,
@@ -312,6 +365,8 @@ export class GameEngine {
         aimX: aimWorldX,
         aimY: aimWorldY,
         isFiring: wantsFire,
+        triggerEdge,
+        triggerHeld,
         wantsReload: !!this.keys['r'],
       },
       this.bulletPool,
@@ -323,9 +378,8 @@ export class GameEngine {
       }
     );
 
-    if (this.player.weapon.currentMag < magBefore) {
-      this.stats.shotsFired++;
-    }
+    // Total rounds discharged across the whole loadout (survives weapon swaps)
+    this.stats.shotsFired = this.player.totalShotsFired;
 
     // Clamp player to bunker walls
     const wallMargin = 55;
@@ -370,12 +424,35 @@ export class GameEngine {
 
     // Broadcast stats for Tactical HUD
     this.stats.health = this.player.health;
-    this.onStatsUpdate?.(this.stats, {
-      currentMag: this.player.weapon.currentMag,
-      reserve: this.player.weapon.reserveAmmo,
-      isReloading: this.player.weapon.isReloading,
-      reloadProgress: this.player.weapon.reloadTimer / this.player.weapon.reloadDuration,
-    });
+    this.onStatsUpdate?.(this.stats, this.buildAmmoState());
+  }
+
+  /** Snapshot of the full loadout for the HUD */
+  public buildAmmoState(): AmmoState {
+    const weapon = this.player.weapon;
+    const loadout = WEAPON_ORDER.reduce((acc, id) => {
+      const w = this.player.weapons[id];
+      acc[id] = {
+        currentMag: w.currentMag,
+        magCapacity: w.magCapacity,
+        reserve: w.reserveAmmo,
+      };
+      return acc;
+    }, {} as AmmoState['loadout']);
+
+    return {
+      weaponId: weapon.id,
+      weaponName: weapon.name,
+      weaponShortName: weapon.shortName,
+      fireMode: weapon.fireMode,
+      currentMag: weapon.currentMag,
+      magCapacity: weapon.magCapacity,
+      reserve: weapon.reserveAmmo,
+      isReloading: weapon.isReloading,
+      reloadProgress: weapon.reloadTimer / weapon.reloadDuration,
+      isSwapping: this.player.isSwapping,
+      loadout,
+    };
   }
 
   private handleSpawning(dt: number) {
@@ -478,7 +555,11 @@ export class GameEngine {
       const dist = Math.hypot(this.player.x - p.x, this.player.y - p.y);
       if (dist < this.player.radius + p.radius) {
         if (p.type === 'ammo') {
-          this.player.weapon.addAmmo(60);
+          // Resupply the whole loadout so swapping weapons always stays viable
+          for (const id of WEAPON_ORDER) {
+            const w = this.player.weapons[id];
+            w.addAmmo(w.config.ammoPickupAmount);
+          }
           soundSynth.playPickup();
         } else if (p.type === 'health') {
           this.player.heal(35);
