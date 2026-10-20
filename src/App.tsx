@@ -7,9 +7,8 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { MobileControls } from './components/MobileControls';
 import { PortraitOverlay } from './components/PortraitOverlay';
 import { TacticalHUD } from './components/TacticalHUD';
-import { ThreeBattlefield } from './components/ThreeBattlefield';
 import { soundSynth } from './game/audio';
-import { BattleFrame, GameEngine } from './game/engine';
+import { GameEngine } from './game/engine';
 import { AmmoState, GameState, PlayerStats } from './game/types';
 
 export default function App() {
@@ -20,7 +19,6 @@ export default function App() {
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [isMobile, setIsMobile] = useState<boolean>(false);
   const [isPortrait, setIsPortrait] = useState<boolean>(false);
-  const [battleFrame, setBattleFrame] = useState<BattleFrame | null>(null);
 
   const [stats, setStats] = useState<PlayerStats>({
     health: 100,
@@ -88,10 +86,6 @@ export default function App() {
       setGameState(newState);
     };
 
-    engine.onSceneUpdate = (frame) => {
-      setBattleFrame(frame);
-    };
-
     const handleResize = () => {
       engine.resize();
     };
@@ -143,15 +137,13 @@ export default function App() {
       className="relative h-screen w-screen overflow-hidden bg-slate-950"
       style={{ touchAction: 'none' }}
     >
-      <ThreeBattlefield frame={battleFrame} />
-
       {/* Landscape Orientation Lock Guidance on Mobile */}
       {isMobile && isPortrait && <PortraitOverlay />}
 
       {/* Main Game Canvas */}
       <canvas
         ref={canvasRef}
-        className="absolute inset-0 block h-full w-full cursor-crosshair"
+        className="block h-full w-full cursor-crosshair"
       />
 
       {/* Tactical Sci-Fi HUD */}
